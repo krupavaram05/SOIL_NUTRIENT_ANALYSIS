@@ -1,0 +1,9 @@
+Test_Category,Scope,Model,Target,Unit,Sample_Count,Metric_Value,t_statistic,p_value,Significance_Conclusion,Hypothesis_Tested
+Correlation Significance Test (r vs 0),Production 5-Fold CV,ExtraTreesRegressor,N,kg/ha,909,r = 0.7731,36.7076,5.5334e-295,Statistically Significant (*** p < 0.001),H0: rho = 0 (No correlation) vs H1: rho != 0
+Correlation Significance Test (r vs 0),Production 5-Fold CV,ExtraTreesRegressor,P,kg/ha,909,r = 0.5660,20.6766,5.6258e-95,Statistically Significant (*** p < 0.001),H0: rho = 0 (No correlation) vs H1: rho != 0
+Correlation Significance Test (r vs 0),Production 5-Fold CV,ExtraTreesRegressor,K,kg/ha,909,r = 0.8390,46.4367,0.0000e+00,Statistically Significant (*** p < 0.001),H0: rho = 0 (No correlation) vs H1: rho != 0
+Correlation Significance Test (r vs 0),Production 5-Fold CV,ExtraTreesRegressor,OC,%,909,r = 0.5478,19.7198,1.4574e-86,Statistically Significant (*** p < 0.001),H0: rho = 0 (No correlation) vs H1: rho != 0
+One-Sample t-test on Residual Bias (MBE),Out-of-Time Test (2025-26),Random Forest,N,kg/ha,938,MBE = 19.741 kg/ha,6.9579,3.4543e-12,"Location shift detected (p < 0.05, Bias=+19.74)",H0: Mean Error = 0 (Unbiased) vs H1: Mean Error != 0
+One-Sample t-test on Residual Bias (MBE),Out-of-Time Test (2025-26),Random Forest,P,kg/ha,938,MBE = 1.699 kg/ha,1.8543,6.3690e-02,"Unbiased (H0 accepted, p > 0.05)",H0: Mean Error = 0 (Unbiased) vs H1: Mean Error != 0
+One-Sample t-test on Residual Bias (MBE),Out-of-Time Test (2025-26),Random Forest,K,kg/ha,938,MBE = 80.824 kg/ha,13.6238,2.8924e-42,"Location shift detected (p < 0.05, Bias=+80.82)",H0: Mean Error = 0 (Unbiased) vs H1: Mean Error != 0
+One-Sample t-test on Residual Bias (MBE),Out-of-Time Test (2025-26),Random Forest,OC,%,938,MBE = -0.224 %,-25.9533,1.6684e-148,"Location shift detected (p < 0.05, Bias=-0.22)",H0: Mean Error = 0 (Unbiased) vs H1: Mean Error != 0

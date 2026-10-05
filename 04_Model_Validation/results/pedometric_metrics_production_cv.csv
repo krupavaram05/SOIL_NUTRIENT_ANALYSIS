@@ -1,0 +1,5 @@
+R2,RMSE,MAE,RPIQ,RPD,CCC,Bias_MBE,NRMSE_Range_%,NRMSE_Mean_%,RMSLE,Adjusted_R2,MAPE_%,NSE,KGE,Evaluation_Scope,Model,Target,Unit,Sample_Count,Feature_Count
+0.5949,49.885,35.672,2.506,1.572,0.737,0.286,11.77,36.59,0.548,0.5738,61.52,0.5949,0.6506,"Production 5-Fold CV (45 Features, 909 pts)",ExtraTreesRegressor (Production),N,kg/ha,909,45
+0.2927,27.107,10.879,0.708,1.19,0.4534,-5.06,4.99,109.05,0.7038,0.2558,90.05,0.2927,0.3205,"Production 5-Fold CV (45 Features, 909 pts)",ExtraTreesRegressor (Production),P,kg/ha,909,45
+0.6871,95.003,56.267,2.587,1.789,0.812,-20.809,14.98,42.11,0.4756,0.6708,39.35,0.6871,0.7311,"Production 5-Fold CV (45 Features, 909 pts)",ExtraTreesRegressor (Production),K,kg/ha,909,45
+0.2963,0.191,0.11,1.201,1.193,0.485,0.002,6.43,58.38,0.1222,0.2596,56.85,0.2963,0.3994,"Production 5-Fold CV (45 Features, 909 pts)",ExtraTreesRegressor (Production),OC,%,909,45

@@ -1,0 +1,5 @@
+Nutrient	Unit	R² (Variance Explained)	Pearson r	Normalized Acc (%)	ICAR Class Acc (%)	Safe-Tier Agreement (%)	Agronomic Tol (±15%)	RPIQ (IQR/RMSE)	RPD (SD/RMSE)	Lin's CCC	RMSE	MAE	Bias (MBE)
+Nitrogen (N)	kg/ha	0.5962	0.7731	88.25%	96.92%	100.00%	80.53%	2.506	1.574	0.7370	49.805	35.647	+0.286
+Phosphorus (P)	kg/ha	0.2935	0.5660	95.01%	70.63%	93.95%	98.35%	0.708	1.190	0.4534	27.091	10.867	-5.060
+Potassium (K)	kg/ha	0.6876	0.8390	85.03%	78.22%	96.04%	79.76%	2.587	1.789	0.8120	94.926	56.263	-20.809
+Organic Carbon (OC)	%	0.2968	0.5478	93.58%	86.91%	96.26%	96.48%	1.201	1.193	0.4850	0.191	0.110	+0.002

@@ -1,0 +1,9 @@
+Evaluation_Scope	Target	Nutrient_Name	Unit	Model	Sample_Count	Feature_Count	R2	RMSE	MAE	RPIQ	RPD	Lin_CCC	Bias_MBE	90%_PICP_%	90%_MPIW	95%_PICP_%	95%_MPIW
+Out-of-Time Test (2025-26)	N	Nitrogen	kg/ha	Random Forest (Uncalibrated)	938	30	-0.0914	89.063	69.627	1.269	0.958	-0.0018	-19.741	73.56%	183.317	82.30%	220.264
+Out-of-Time Test (2025-26)	P	Phosphorus	kg/ha	Random Forest (Uncalibrated)	938	30	-0.0427	28.101	17.774	0.712	0.980	-0.0162	-1.699	94.88%	137.939	96.27%	156.829
+Out-of-Time Test (2025-26)	K	Potassium	kg/ha	Random Forest (Uncalibrated)	938	30	-0.2340	198.773	157.288	1.462	0.901	-0.0002	-80.824	75.27%	443.337	86.46%	529.320
+Out-of-Time Test (2025-26)	OC	Organic Carbon	%	Random Forest (Uncalibrated)	938	30	-1.2629	0.347	0.301	0.807	0.665	-0.0350	+0.224	77.19%	1.013	86.14%	1.268
+Calibrated Out-of-Time Test	N	Nitrogen	kg/ha	Calibrated RF (N=25 anchors)	913	30	-0.0379	87.358	69.693	1.294	0.982	-0.0010	-2.739	68.35%	183.592	-	-
+Calibrated Out-of-Time Test	P	Phosphorus	kg/ha	Calibrated RF (N=25 anchors)	913	30	-0.0398	28.222	18.168	0.709	0.981	-0.0169	-0.570	91.24%	137.977	-	-
+Calibrated Out-of-Time Test	K	Potassium	kg/ha	Calibrated RF (N=25 anchors)	913	30	-0.0607	183.640	160.425	1.555	0.971	-0.0010	+30.945	53.56%	442.761	-	-
+Calibrated Out-of-Time Test	OC	Organic Carbon	%	Calibrated RF (N=25 anchors)	913	30	-0.3238	0.266	0.203	1.052	0.870	-0.0556	-0.031	95.84%	0.933	-	-
