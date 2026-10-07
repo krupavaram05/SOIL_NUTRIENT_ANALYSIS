@@ -203,6 +203,34 @@ class PedometricMetrics:
             'NMPIW_%': round(nmpiw, 2)
         }
 
+    @staticmethod
+    def conformalized_quantile_regression(y_calib: np.ndarray,
+                                          q_low_calib: np.ndarray,
+                                          q_high_calib: np.ndarray,
+                                          q_low_test: np.ndarray,
+                                          q_high_test: np.ndarray,
+                                          nominal_level: float = 90.0,
+                                          clip_min: float = 0.0) -> tuple:
+        r"""
+        Tier 4: Conformalized Quantile Regression (CQR; Romano, Patterson & Candès, NeurIPS 2019).
+        Computes non-conformity scores:
+            E_i = max(q_low_calib(x_i) - y_i, y_i - q_high_calib(x_i))
+        Calculates empirical finite-sample correction quantile:
+            q_conf = quantile(E_i, ceil((1 - alpha) * (N + 1)) / N)
+        Adjusts prediction intervals:
+            [max(clip_min, q_low_test - q_conf), q_high_test + q_conf]
+        Guarantees marginal coverage P(Y \in C(X)) >= 1 - alpha.
+        """
+        alpha = (100.0 - nominal_level) / 100.0
+        n_calib = len(y_calib)
+        E = np.maximum(q_low_calib - y_calib, y_calib - q_high_calib)
+        conf_level = np.ceil((1.0 - alpha) * (n_calib + 1)) / n_calib
+        conf_level = min(1.0, float(conf_level))
+        cqr_offset = float(np.percentile(E, conf_level * 100.0))
+        cqr_lower = np.clip(q_low_test - cqr_offset, clip_min, None)
+        cqr_upper = q_high_test + cqr_offset
+        return cqr_lower, cqr_upper, cqr_offset
+
     # =========================================================================
     # Tier 5: Not Recommended / Avoid in Soil Analysis (Pedometric Evaluation)
     # =========================================================================
@@ -378,40 +406,81 @@ def run_full_pedometric_evaluation():
     X_test_s = scaler.transform(X_test_imp)
 
     qrf_bounds = {}
+    cqr_bounds = {}
+    cqr_offsets = {}
     p_feature_count = len(feat_cols)
-    print(f"[+] Quantile RF trained with p={p_feature_count} mutual SCORPAN covariates.")
+    print(f"[+] Quantile RF & CQR Engine initialized with p={p_feature_count} mutual SCORPAN covariates.")
+
+    # 80/20 train/calibration split for Conformalized Quantile Regression (Romano et al., 2019)
+    np.random.seed(42)
+    n_train_tot = len(X_train_s)
+    perm_idx = np.random.permutation(n_train_tot)
+    calib_split = int(0.20 * n_train_tot)
+    c_idx, pt_idx = perm_idx[:calib_split], perm_idx[calib_split:]
+    X_prop_tr, X_calib = X_train_s[pt_idx], X_train_s[c_idx]
 
     for t in targets:
         y_tr = train_df[t].values
+        y_prop_tr = y_tr[pt_idx]
+        y_cal = y_tr[c_idx]
         y_te = test_df[t].values.copy()
         if t == 'N':
             y_te = np.clip(y_te, 0, 500)
         use_log = t in ['P', 'K']
-        y_fit = np.log1p(y_tr) if use_log else y_tr
+        y_fit = np.log1p(y_prop_tr) if use_log else y_prop_tr
 
         rf = RandomForestRegressor(n_estimators=350, max_depth=12, random_state=42, n_jobs=-1)
-        rf.fit(X_train_s, y_fit)
+        rf.fit(X_prop_tr, y_fit)
 
-        tree_preds = np.array([tree.predict(X_test_s) for tree in rf.estimators_])
+        # Calibration set tree predictions
+        cal_tree_preds = np.array([tree.predict(X_calib) for tree in rf.estimators_])
         if use_log:
-            tree_preds = np.expm1(tree_preds)
-            tree_preds = np.clip(tree_preds, 0, None)
+            cal_tree_preds = np.clip(np.expm1(cal_tree_preds), 0, None)
 
-        q05 = np.percentile(tree_preds, 5, axis=0)
-        q95 = np.percentile(tree_preds, 95, axis=0)
-        q025 = np.percentile(tree_preds, 2.5, axis=0)
-        q975 = np.percentile(tree_preds, 97.5, axis=0)
+        # Test set tree predictions
+        test_tree_preds = np.array([tree.predict(X_test_s) for tree in rf.estimators_])
+        if use_log:
+            test_tree_preds = np.clip(np.expm1(test_tree_preds), 0, None)
+
+        # 90% and 95% nominal raw quantiles
+        q05_cal = np.percentile(cal_tree_preds, 5, axis=0)
+        q95_cal = np.percentile(cal_tree_preds, 95, axis=0)
+        q025_cal = np.percentile(cal_tree_preds, 2.5, axis=0)
+        q975_cal = np.percentile(cal_tree_preds, 97.5, axis=0)
+
+        q05_te = np.percentile(test_tree_preds, 5, axis=0)
+        q95_te = np.percentile(test_tree_preds, 95, axis=0)
+        q025_te = np.percentile(test_tree_preds, 2.5, axis=0)
+        q975_te = np.percentile(test_tree_preds, 97.5, axis=0)
+
+        # CQR conformal calibration
+        cqr_low_90, cqr_high_90, offset_90 = PedometricMetrics.conformalized_quantile_regression(
+            y_calib=y_cal, q_low_calib=q05_cal, q_high_calib=q95_cal,
+            q_low_test=q05_te, q_high_test=q95_te, nominal_level=90.0, clip_min=0.0
+        )
+        cqr_low_95, cqr_high_95, offset_95 = PedometricMetrics.conformalized_quantile_regression(
+            y_calib=y_cal, q_low_calib=q025_cal, q_high_calib=q975_cal,
+            q_low_test=q025_te, q_high_test=q975_te, nominal_level=95.0, clip_min=0.0
+        )
 
         qrf_bounds[t] = {
-            '90%': (q05, q95),
-            '95%': (q025, q975),
+            '90%': (q05_te, q95_te),
+            '95%': (q025_te, q975_te),
             'rf_model': rf
         }
+        cqr_bounds[t] = {
+            '90%': (cqr_low_90, cqr_high_90),
+            '95%': (cqr_low_95, cqr_high_95)
+        }
+        cqr_offsets[t] = {'90%': offset_90, '95%': offset_95}
 
-        m90 = PedometricMetrics.picp_mpiw(y_te, q05, q95)
-        m95 = PedometricMetrics.picp_mpiw(y_te, q025, q975)
-        print(f" [+] Soil {t:<3} | 90% PI: PICP = {m90['PICP_%']:5.2f}% (Target: 90%) | MPIW = {m90['MPIW']:7.2f} {units[t]} ({m90['NMPIW_%']:.1f}% range)")
-        print(f"            | 95% PI: PICP = {m95['PICP_%']:5.2f}% (Target: 95%) | MPIW = {m95['MPIW']:7.2f} {units[t]} ({m95['NMPIW_%']:.1f}% range)")
+        m90_raw = PedometricMetrics.picp_mpiw(y_te, q05_te, q95_te)
+        m90_cqr = PedometricMetrics.picp_mpiw(y_te, cqr_low_90, cqr_high_90)
+        m95_raw = PedometricMetrics.picp_mpiw(y_te, q025_te, q975_te)
+        m95_cqr = PedometricMetrics.picp_mpiw(y_te, cqr_low_95, cqr_high_95)
+
+        print(f" [+] Soil {t:<3} | 90% PI: Raw PICP={m90_raw['PICP_%']:5.2f}% -> CQR PICP={m90_cqr['PICP_%']:5.2f}% (Target: 90%) [Offset: +{offset_90:.2f} {units[t]}]")
+        print(f"            | 95% PI: Raw PICP={m95_raw['PICP_%']:5.2f}% -> CQR PICP={m95_cqr['PICP_%']:5.2f}% (Target: 95%) [Offset: +{offset_95:.2f} {units[t]}]")
 
     # -------------------------------------------------------------------------
     # PART 2: FEW-SHOT SEASONAL CALIBRATION (N=25)
@@ -498,31 +567,67 @@ def run_full_pedometric_evaluation():
     print(f"\n[+] Master Pedometric Metrics CSV saved to:\n    - {master_csv_path}\n    - {legacy_results_dir / 'pedometric_comprehensive_metrics_2025_2026.csv'}")
 
     # -------------------------------------------------------------------------
-    # PART 4: UNCERTAINTY BOUNDS TABLE (Tier 4)
+    # PART 4: UNCERTAINTY BOUNDS TABLE & CQR CALIBRATION (Tier 4)
     # -------------------------------------------------------------------------
     uncertainty_records = []
+    cqr_comparison_records = []
+
     for t in targets:
         y_te = df_preds[f"{t}_Actual"].values
-        m90 = PedometricMetrics.picp_mpiw(y_te, qrf_bounds[t]['90%'][0], qrf_bounds[t]['90%'][1])
-        m95 = PedometricMetrics.picp_mpiw(y_te, qrf_bounds[t]['95%'][0], qrf_bounds[t]['95%'][1])
+        m90_raw = PedometricMetrics.picp_mpiw(y_te, qrf_bounds[t]['90%'][0], qrf_bounds[t]['90%'][1])
+        m95_raw = PedometricMetrics.picp_mpiw(y_te, qrf_bounds[t]['95%'][0], qrf_bounds[t]['95%'][1])
+        m90_cqr = PedometricMetrics.picp_mpiw(y_te, cqr_bounds[t]['90%'][0], cqr_bounds[t]['90%'][1])
+        m95_cqr = PedometricMetrics.picp_mpiw(y_te, cqr_bounds[t]['95%'][0], cqr_bounds[t]['95%'][1])
+
         uncertainty_records.append({
             'Target': t,
             'Unit': units[t],
             'Test_Samples': len(y_te),
             '90%_Nominal_Target_%': 90.0,
-            '90%_PICP_%': m90['PICP_%'],
-            '90%_MPIW': m90['MPIW'],
-            '90%_NMPIW_%': m90['NMPIW_%'],
+            '90%_PICP_%': m90_cqr['PICP_%'],
+            '90%_Raw_PICP_%': m90_raw['PICP_%'],
+            '90%_CQR_Calibrated_PICP_%': m90_cqr['PICP_%'],
+            '90%_MPIW': m90_cqr['MPIW'],
+            '90%_NMPIW_%': m90_cqr['NMPIW_%'],
             '95%_Nominal_Target_%': 95.0,
-            '95%_PICP_%': m95['PICP_%'],
-            '95%_MPIW': m95['MPIW'],
-            '95%_NMPIW_%': m95['NMPIW_%']
+            '95%_PICP_%': m95_cqr['PICP_%'],
+            '95%_Raw_PICP_%': m95_raw['PICP_%'],
+            '95%_CQR_Calibrated_PICP_%': m95_cqr['PICP_%'],
+            '95%_MPIW': m95_cqr['MPIW'],
+            '95%_NMPIW_%': m95_cqr['NMPIW_%']
         })
+
+        cqr_comparison_records.append({
+            'Target': t,
+            'Unit': units[t],
+            'Test_Samples': len(y_te),
+            '90%_Nominal_%': 90.0,
+            '90%_Raw_QRF_PICP_%': m90_raw['PICP_%'],
+            '90%_Raw_QRF_MPIW': m90_raw['MPIW'],
+            '90%_CQR_Offset': cqr_offsets[t]['90%'],
+            '90%_CQR_Calibrated_PICP_%': m90_cqr['PICP_%'],
+            '90%_CQR_Calibrated_MPIW': m90_cqr['MPIW'],
+            '95%_Nominal_%': 95.0,
+            '95%_Raw_QRF_PICP_%': m95_raw['PICP_%'],
+            '95%_Raw_QRF_MPIW': m95_raw['MPIW'],
+            '95%_CQR_Offset': cqr_offsets[t]['95%'],
+            '95%_CQR_Calibrated_PICP_%': m95_cqr['PICP_%'],
+            '95%_CQR_Calibrated_MPIW': m95_cqr['MPIW']
+        })
+
     unc_df = pd.DataFrame(uncertainty_records)
+    cqr_comp_df = pd.DataFrame(cqr_comparison_records)
+
     unc_csv_path = csv_dir / "uncertainty_bounds_quantile_rf.csv"
+    cqr_comp_path = csv_dir / "uncertainty_bounds_cqr_comparison.csv"
+
     unc_df.to_csv(unc_csv_path, index=False)
     unc_df.to_csv(legacy_results_dir / "uncertainty_bounds_quantile_rf.csv", index=False)
+    cqr_comp_df.to_csv(cqr_comp_path, index=False)
+    cqr_comp_df.to_csv(legacy_results_dir / "uncertainty_bounds_cqr_comparison.csv", index=False)
+
     print(f"[+] Saved Quantile RF Uncertainty Bounds CSV to:\n    - {unc_csv_path}")
+    print(f"[+] Saved CQR Conformal Calibration Comparison CSV to:\n    - {cqr_comp_path}")
 
     # -------------------------------------------------------------------------
     # PART 5: TIER 5 COMPARATIVE ANALYSIS
