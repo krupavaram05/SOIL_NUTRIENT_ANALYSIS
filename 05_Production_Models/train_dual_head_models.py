@@ -54,10 +54,13 @@ CATEGORIZED_FEATURES = {
     ],
     "Spatial Trend Geomorphometry (3)": [
         'Spatial_Lat2', 'Spatial_Lon2', 'Spatial_Lat_Lon'
+    ],
+    "Soil-Terrain Hydrology (2)": [
+        'Clay_x_Elevation', 'Moisture_div_Slope'
     ]
 }
 
-# Flat list of all 45 model features in order
+# Flat list of all 47 model features in order
 ALL_MODEL_FEATURES = []
 for feats in CATEGORIZED_FEATURES.values():
     ALL_MODEL_FEATURES.extend(feats)
@@ -67,6 +70,7 @@ BASE_39_FEATURES = [
     f for f in ALL_MODEL_FEATURES 
     if f not in CATEGORIZED_FEATURES["Physical Domain Interactions (3)"] 
     and f not in CATEGORIZED_FEATURES["Spatial Trend Geomorphometry (3)"]
+    and f not in CATEGORIZED_FEATURES["Soil-Terrain Hydrology (2)"]
 ]
 
 # ICAR Fertility Class Definitions (0: Low, 1: Medium, 2: High)
@@ -116,6 +120,12 @@ def engineer_raw_features(df: pd.DataFrame) -> pd.DataFrame:
         res['Spatial_Lat2'] = lat_c ** 2
         res['Spatial_Lon2'] = lon_c ** 2
         res['Spatial_Lat_Lon'] = lat_c * lon_c
+
+    # Soil-Terrain Hydrology (Sediment redistribution & erosion-deposition dynamics)
+    if 'Clay_x_Elevation' not in res.columns and all(c in res.columns for c in ['Clay_Fraction_g_kg', 'Elevation_m']):
+        res['Clay_x_Elevation'] = res['Clay_Fraction_g_kg'] * res['Elevation_m']
+    if 'Moisture_div_Slope' not in res.columns and all(c in res.columns for c in ['Soil_Moisture_0_7cm', 'Slope_deg']):
+        res['Moisture_div_Slope'] = res['Soil_Moisture_0_7cm'] / (res['Slope_deg'] + 0.1)
 
     return res
 
@@ -284,14 +294,17 @@ def main():
         "training_samples": len(df_raw),
         "total_features": len(ALL_MODEL_FEATURES),
         "base_features": len(BASE_39_FEATURES),
+        "SCORPAN_Feature_Count": len(ALL_MODEL_FEATURES),
+        "Effective_Resolution": "10m",
+        "regressor_architecture": "Hybrid_VotingRegressor_70ET_30GBDT (70% ExtraTreesRegressor + 30% GradientBoostingRegressor)",
+        "classifier_architecture": "ExtraTreesClassifier (n_estimators=400, max_depth=14, min_samples_leaf=2, max_features=0.65)",
+        "advisory_engine": "ANGRAU_STCR_v2026",
         "feature_categories": CATEGORIZED_FEATURES,
         "feature_names_in_order": ALL_MODEL_FEATURES,
         "base_feature_names": BASE_39_FEATURES,
         "targets": targets,
         "icar_class_labels": ICAR_CLASS_LABELS,
         "skew_corrected_targets": ["P", "K"],
-        "regressor_architecture": "ExtraTreesRegressor (n_estimators=450, max_depth=16, min_samples_leaf=2, max_features=0.65)",
-        "classifier_architecture": "ExtraTreesClassifier (n_estimators=400, max_depth=14, min_samples_leaf=2, max_features=0.65)",
         "cv_performance": cv_records
     }
     meta_file = model_dir / "model_metadata.json"

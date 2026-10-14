@@ -125,12 +125,24 @@ def engineer_features(df: pd.DataFrame) -> pd.DataFrame:
         res['Spatial_Lon2'] = lon_c ** 2
         res['Spatial_Lat_Lon'] = lat_c * lon_c
 
+    # Soil-Terrain Hydrology (Sediment redistribution & erosion-deposition dynamics)
+    if 'Clay_x_Elevation' not in res.columns and all(c in res.columns for c in ['Clay_Fraction_g_kg', 'Elevation_m']):
+        res['Clay_x_Elevation'] = res['Clay_Fraction_g_kg'] * res['Elevation_m']
+    if 'Moisture_div_Slope' not in res.columns and all(c in res.columns for c in ['Soil_Moisture_0_7cm', 'Slope_deg']):
+        res['Moisture_div_Slope'] = res['Soil_Moisture_0_7cm'] / (res['Slope_deg'] + 0.1)
+
     return res
 
 
 def run_forecasting_pipeline(input_csv: str, output_csv: str = None, anchor_csv: str = None, crop: str = "Paddy"):
     print("=" * 80)
     print("MBU DIGITAL SOIL MAPPING: 2026–2027 FORECASTING & ADVISORY ENGINE")
+    print("=" * 80)
+    print(f"[*] Configuration Metadata:")
+    print(f"    - SCORPAN_Feature_Count : {META.get('SCORPAN_Feature_Count', len(FEATURE_NAMES))}")
+    print(f"    - Effective_Resolution  : {META.get('Effective_Resolution', '10m')}")
+    print(f"    - Regressors            : {META.get('regressor_architecture', 'Hybrid_VotingRegressor_70ET_30GBDT')}")
+    print(f"    - Advisory_Engine       : {META.get('advisory_engine', 'ANGRAU_STCR_v2026')}")
     print("=" * 80)
 
     print(f"[*] Loading input features: {input_csv}")
@@ -139,7 +151,9 @@ def run_forecasting_pipeline(input_csv: str, output_csv: str = None, anchor_csv:
 
     missing = [f for f in FEATURE_NAMES if f not in df_features.columns]
     if missing:
-        raise ValueError(f"Missing required 39-feature covariates in input: {missing}")
+        raise ValueError(f"Missing required 47-feature covariates in input: {missing}")
+
+    assert len(FEATURE_NAMES) == 47, f"Expected 47 SCORPAN features, found {len(FEATURE_NAMES)}"
 
     X = df_features[FEATURE_NAMES]
     X_imp = IMPUTER.transform(X)
@@ -207,7 +221,25 @@ def run_forecasting_pipeline(input_csv: str, output_csv: str = None, anchor_csv:
         output_csv = Path(input_csv).stem + "_2026_2027_forecast_advisory.csv"
 
     results_df.to_csv(output_csv, index=False)
+    
+    # Standardised Output Metadata Sidecar
+    meta_export = {
+        "SCORPAN_Feature_Count": 47,
+        "Effective_Resolution": "10m",
+        "Regressors": "Hybrid_VotingRegressor_70ET_30GBDT",
+        "Advisory_Engine": "ANGRAU_STCR_v2026",
+        "Target_Crop": crop,
+        "Input_Source": str(input_csv),
+        "Output_CSV": str(output_csv),
+        "Total_Farm_Plots": len(results_df),
+        "Few_Shot_Anchor_Calibration": bool(anchor_csv and Path(anchor_csv).exists())
+    }
+    meta_json_path = Path(output_csv).with_suffix('.metadata.json')
+    with open(meta_json_path, 'w', encoding='utf-8') as f:
+        json.dump(meta_export, f, indent=2)
+
     print(f"\n[+] Forecast & Fertilizer Advisory saved to: {output_csv}")
+    print(f"[+] Export Metadata Schema saved to: {meta_json_path}")
     print("\nSample Output:")
     print(results_df.head(3).to_string())
     return results_df
